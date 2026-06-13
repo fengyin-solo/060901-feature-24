@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useRoom } from '@/composables/useRoom'
 import { useExpire } from '@/composables/useExpire'
 import RoomCard from '@/components/RoomCard.vue'
 import { copyToClipboard } from '@/utils/helpers'
+import { getDaysRemaining } from '@/utils/helpers'
 
 const router = useRouter()
 const { activeRooms, createRoom, joinRoomByCode, error, loadRooms } = useRoom()
@@ -17,6 +18,28 @@ const hostName = ref('')
 const joinCode = ref('')
 const joinName = ref('')
 const copySuccess = ref(false)
+
+const expiringRooms = computed(() =>
+  activeRooms.value
+    .filter(r => getDaysRemaining(r.expiresAt) <= 2)
+    .sort((a, b) => getDaysRemaining(a.expiresAt) - getDaysRemaining(b.expiresAt))
+)
+
+const expiringIds = computed(() => new Set(expiringRooms.value.map(r => r.id)))
+
+const playingRooms = computed(() =>
+  activeRooms.value
+    .filter(r => r.status === 'playing' && !expiringIds.value.has(r.id))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+)
+
+const playingIds = computed(() => new Set(playingRooms.value.map(r => r.id)))
+
+const recentRooms = computed(() =>
+  activeRooms.value
+    .filter(r => !expiringIds.value.has(r.id) && !playingIds.value.has(r.id))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+)
 
 onMounted(() => {
   loadRooms()
@@ -98,17 +121,50 @@ const closeModals = () => {
         </button>
       </div>
 
-      <div v-if="activeRooms.length > 0" class="mb-8">
-        <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <span>📋</span> 我的房间
-        </h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <RoomCard 
-            v-for="room in activeRooms" 
-            :key="room.id" 
-            :room="room"
-            @click="goToRoom(room.id)"
-          />
+      <div v-if="activeRooms.length > 0" class="mb-8 space-y-8">
+        <div v-if="expiringRooms.length > 0">
+          <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <span>⏳</span> 即将过期
+            <span class="text-sm font-normal text-orange-500">({{ expiringRooms.length }})</span>
+          </h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <RoomCard 
+              v-for="room in expiringRooms" 
+              :key="room.id" 
+              :room="room"
+              @click="goToRoom(room.id)"
+            />
+          </div>
+        </div>
+
+        <div v-if="playingRooms.length > 0">
+          <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <span>🎮</span> 进行中
+            <span class="text-sm font-normal text-green-500">({{ playingRooms.length }})</span>
+          </h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <RoomCard 
+              v-for="room in playingRooms" 
+              :key="room.id" 
+              :room="room"
+              @click="goToRoom(room.id)"
+            />
+          </div>
+        </div>
+
+        <div v-if="recentRooms.length > 0">
+          <h2 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <span>📋</span> 最近活跃
+            <span class="text-sm font-normal text-gray-400">({{ recentRooms.length }})</span>
+          </h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <RoomCard 
+              v-for="room in recentRooms" 
+              :key="room.id" 
+              :room="room"
+              @click="goToRoom(room.id)"
+            />
+          </div>
         </div>
       </div>
 
